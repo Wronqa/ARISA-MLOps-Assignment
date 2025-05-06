@@ -1,0 +1,25 @@
+# Linting workflow triggered when PR is opened
+name: code checking
+
+# run on pull request
+on:
+  pull_request:
+    branches:
+      - main
+
+# run install and lint steps from makefile
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with: 
+          python-version: "3.11"
+      - name: Install dependencies
+        run: make requirements
+      - name: Lint using flake8 and black
+        run: make lint
