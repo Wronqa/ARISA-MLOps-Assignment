@@ -1,0 +1,66 @@
+{
+	"name": "ARISA-MLOps-devcontainer",
+	"image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+
+	"postCreateCommand": "pip install --no-cache-dir mlflow==2.12.1 psycopg2",
+	"postStartCommand": "mkdir -p /home/vscode/mlflow/artifacts & mlflow ui --backend-store-uri sqlite:////home/vscode/mlflow/mlflow.db --default-artifact-root s3://${ARTIFACT_BUCKET}/models --host 0.0.0.0 --port 5000",
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	"forwardPorts": [5000, 8080],
+
+	// Configure tool-specific properties.
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"humao.rest-client",
+                "ms-dotnettools.dotnet-interactive-vscode",
+				"ms-azuretools.vscode-docker",
+				"ms-python.python",
+				"github.copilot",
+				"github.copilot-chat"
+			]
+		}
+	},
+	
+	"remoteEnv": {
+		"MLFLOWDBUSERNAME": "${localEnv:MLFLOWDBUSERNAME}",
+		"MLFLOWDBPASS": "${localEnv:MLFLOWDBPASS}",
+		"MLFLOWDBENDPOINT": "${localEnv:MLFLOWDBENDPOINT}",
+		"MLFLOWDBPORT": "${localEnv:MLFLOWDBPORT}",
+		"MLFLOWDB": "${localEnv:MLFLOWDB}",
+		"AWS_ACCESS_KEY_ID": "${localEnv:AWS_ACCESS_KEY_ID}",
+		"AWS_SECRET_ACCESS_KEY_ID": "${localEnv:AWS_SECRET_ACCESS_KEY_ID}",
+		"ARTIFACT_BUCKET": "${localEnv:ARTIFACT_BUCKET}"
+	},
+	
+	"containerEnv": {
+		"iscontainer": "y",
+        "MLFLOW_TRACKING_URI": "http://localhost:5000"
+	},
+	
+	"portsAttributes": {
+		"5000": {
+			"label": "MLflow UI",
+			"onAutoForward": "openBrowser"
+		}
+	},
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+	"secrets": {
+		"MLFLOWDBUSERNAME": {
+			"description": "Username for authenticating the Mlflow backend db connection."
+		},
+		"MLFLOWDBPASS": { 
+			"description": "Password for authenticating the Mlflow backend db connection."
+		},
+		"MLFLOWDBENDPOINT": { 
+			"description": "Endpoint where the Mlflow backend is publicly available."
+		},
+		"MLFLOWDBPORT": { 
+			"description": "Port where the Mlflow backend db is exposed."
+		},
+		"MLFLOWDB": { 
+			"description": "Name of Mlflow backend db."
+		}
+	}
+}
