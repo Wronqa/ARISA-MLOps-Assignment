@@ -6,6 +6,13 @@ import re
 import zipfile
 
 from kaggle.api.kaggle_api_extended import KaggleApi
+from sklearn.preprocessing import OrdinalEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
+
+
 from loguru import logger
 import pandas as pd
 
@@ -25,51 +32,56 @@ def get_raw_data(dataset_name:str=DATASET)->None:
 
 
 
-
-
-def extract_title(name:str)-> str|None:
-    """Extract title from passenger name."""
-    match = re.search(r",\s*([\w\s]+)\.", name)
-
-    return match.group(1) if match else None
-
-
 def preprocess_df(file:str|Path)->str|Path:
-    """Preprocess datasets."""
-    _, file_name = os.path.split(file)
-    df_data = pd.read_csv(file)
-    df_data = df_data.drop(columns=["Ticket"])
 
-    df_data["Title"] = df_data["Name"].apply(extract_title)
+    df = pd.read_csv(file)
+    df_ids = df.pop("id")
 
-    # pattern to match a letter followed by a number
-    cabin_pattern = r"([A-Za-z]+)(\d+)"
+    smoking_status = [['formerly smoked', 'never smoked', 'smokes','Unknown']]  
 
-    # run pattern on Cabin to extract all matches
-    matches = df_data["Cabin"].str.extractall(cabin_pattern)
-    matches = matches.reset_index()
+    ordinal_encoder_smoking_status = create_ordinal_encoder(smoking_status)
+    hot_encoder = OneHotEncoder(drop='first')
 
-    # create a new column for each letter and number matched
-    result = matches.pivot(index="level_0", columns="match", values=[0, 1])
-    result.columns = [f"{col[0]}_{col[1]}" for col in result.columns]
+    preprocessor = ColumnTransformer(
+    transformers=[
+        ('ever_married', hot_encoder, ['ever_married']),
+        ('work_type', hot_encoder, ['work_type']),
+        ('gender', hot_encoder, ['gender']),
+        ('Residence_type', hot_encoder, ['Residence_type']),
+        ('smoking_status', ordinal_encoder_smoking_status, ['smoking_status'])
+    ],
+    remainder='passthrough'  
+    )
 
-    # join to original train dataframe
-    df_data = df_data.join(result[["0_0", "1_0"]])
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor)
+    ])
 
-    # fill nans
-    df_data["1_0"] = df_data["1_0"].astype(float)
-    df_data = df_data.fillna({"0_0": "N", "1_0": df_data["1_0"].mean()})
-    df_data["1_0"] = df_data["1_0"].astype(int)
+    encoded_data = preprocessor.fit_transform(df)
 
-    # rename new columns and drop old ones
-    df_data = df_data.rename(columns={"0_0": "Deck", "1_0": "CabinNumber"})
-    df_data = df_data.drop(columns=["Cabin", "Name"], axis=1)
-    df_data = df_data.fillna({"Embarked": "N", "Age": df_data["Age"].mean()})
+    transformed_df = pd.DataFrame(encoded_data,columns=preprocessor.get_feature_names_out())
+
+    df_train, df_test = train_test_split(transformed_df, test_size=0.2, random_state=42)
+
     PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    outfile_path = PROCESSED_DATA_DIR / file_name
-    df_data.to_csv(outfile_path, index=False)
 
-    return outfile_path
+    train_path = PROCESSED_DATA_DIR / "train.csv"
+    test_path = PROCESSED_DATA_DIR / "test.csv"
+
+    df_train.to_csv(train_path, index=False)
+    df_test.to_csv(test_path, index=False)
+
+    logger.info(f"Train saved to {train_path}, Test saved to {test_path}")
+
+    return train_path, test_path
+
+
+
+
+
+def create_ordinal_encoder(categories_order):
+    return OrdinalEncoder(categories=categories_order)
+
 
 
 if __name__=="__main__":

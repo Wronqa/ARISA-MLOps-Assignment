@@ -24,4 +24,6 @@ MODELS_DIR = PROJ_ROOT / "models"
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
-target = "target"
+MODEL_NAME = "stroke_prediction_bclass"
+
+target = "remainder__stroke"
