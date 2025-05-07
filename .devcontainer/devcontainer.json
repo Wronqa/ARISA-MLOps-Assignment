@@ -2,8 +2,8 @@
 	"name": "ARISA-MLOps-devcontainer",
 	"image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
 
-	"postCreateCommand": "pip install --no-cache-dir mlflow==2.12.1 psycopg2",
-	"postStartCommand": "mkdir -p /home/vscode/mlflow/mlflow_local_artifacts && mlflow server --backend-store-uri sqlite:////home/vscode/mlflow/mlflow.db --default-artifact-root file:///home/vscode/mlflow/mlflow_local_artifacts --host 0.0.0.0 --port 5000",	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	"postCreateCommand": "pip install --no-cache-dir mlflow==2.12.1 psycopg2 boto3",
+	"postStartCommand": "mkdir -p /home/vscode/mlflow/artifacts & mlflow ui --backend-store-uri sqlite:////home/vscode/mlflow/mlflow.db --default-artifact-root s3://${ARTIFACT_BUCKET}/models --host 0.0.0.0 --port 5000",
 	"forwardPorts": [5000, 8080],
 
 	// Configure tool-specific properties.
