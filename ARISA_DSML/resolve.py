@@ -15,6 +15,7 @@ def get_model_by_alias(client, model_name:str=MODEL_NAME, alias:str="champion"):
         raise(e)
     return alias_mv
 
+
 if __name__=="__main__":
     client = MlflowClient(mlflow.get_tracking_uri())
     champ_mv = get_model_by_alias(client)
