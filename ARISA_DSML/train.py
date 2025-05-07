@@ -332,7 +332,7 @@ def get_or_create_experiment(experiment_name: str):
 
 if __name__ == "__main__":
 
-    print('Comment for test starting github actions 6')
+    print('Comment for test starting github actions 7')
 
     df_train = pd.read_csv(PROCESSED_DATA_DIR / "train.csv")
 
