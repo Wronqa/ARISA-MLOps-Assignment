@@ -40,47 +40,54 @@ def get_raw_data(dataset_name:str=DATASET)->None:
     return latest_file.name
 
 
-def preprocess_df(file:str|Path)->str|Path:
-
+def preprocess_df(file: str | Path) -> tuple[Path, Path]:
     df = pd.read_csv(file)
     df_ids = df.pop("id")
 
-    smoking_status = [['formerly smoked', 'never smoked', 'smokes','Unknown']]  
+    preprocessor = build_preprocessor()
+    transformed_df = preprocess_data(df, preprocessor)
 
-    ordinal_encoder_smoking_status = create_ordinal_encoder(smoking_status)
-    hot_encoder = OneHotEncoder(drop='first')
+    df_train, df_test = split_data(transformed_df)
 
-    preprocessor = ColumnTransformer(
-    transformers=[
-        ('ever_married', hot_encoder, ['ever_married']),
-        ('work_type', hot_encoder, ['work_type']),
-        ('gender', hot_encoder, ['gender']),
-        ('Residence_type', hot_encoder, ['Residence_type']),
-        ('smoking_status', ordinal_encoder_smoking_status, ['smoking_status'])
-    ],
-    remainder='passthrough'  
-    )
-
-    pipeline = Pipeline(steps=[
-        ('preprocessor', preprocessor)
-    ])
-
-    encoded_data = preprocessor.fit_transform(df)
-
-    transformed_df = pd.DataFrame(encoded_data,columns=preprocessor.get_feature_names_out())
-
-    df_train, df_test = train_test_split(transformed_df, test_size=0.2, random_state=42)
-
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    train_path = PROCESSED_DATA_DIR / "train.csv"
-    test_path = PROCESSED_DATA_DIR / "test.csv"
-
-    df_train.to_csv(train_path, index=False)
-    df_test.to_csv(test_path, index=False)
+    train_path, test_path = save_processed_data(df_train, df_test)
 
     logger.info(f"Train saved to {train_path}, Test saved to {test_path}")
 
+    return train_path, test_path
+
+
+def build_preprocessor() -> ColumnTransformer:
+    smoking_status = [['formerly smoked', 'never smoked', 'smokes', 'Unknown']]
+    ordinal_encoder = create_ordinal_encoder(smoking_status)
+    hot_encoder = OneHotEncoder(drop='first')
+
+    return ColumnTransformer(
+        transformers=[
+            ('ever_married', hot_encoder, ['ever_married']),
+            ('work_type', hot_encoder, ['work_type']),
+            ('gender', hot_encoder, ['gender']),
+            ('Residence_type', hot_encoder, ['Residence_type']),
+            ('smoking_status', ordinal_encoder, ['smoking_status']),
+        ],
+        remainder='passthrough'
+    )
+
+
+def preprocess_data(df: pd.DataFrame, preprocessor: ColumnTransformer) -> pd.DataFrame:
+    encoded_data = preprocessor.fit_transform(df)
+    return pd.DataFrame(encoded_data, columns=preprocessor.get_feature_names_out())
+
+
+def split_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return train_test_split(df, test_size=0.2, random_state=42)
+
+
+def save_processed_data(df_train: pd.DataFrame, df_test: pd.DataFrame) -> tuple[Path, Path]:
+    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    train_path = PROCESSED_DATA_DIR / "train.csv"
+    test_path = PROCESSED_DATA_DIR / "test.csv"
+    df_train.to_csv(train_path, index=False)
+    df_test.to_csv(test_path, index=False)
     return train_path, test_path
 
 
