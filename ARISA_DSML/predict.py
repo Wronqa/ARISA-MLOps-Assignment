@@ -53,6 +53,7 @@ if __name__ == "__main__":
 
     client = MlflowClient(mlflow.get_tracking_uri())
     model_info = get_model_by_alias(client, alias="champion")
+
     if model_info is None:
         logger.info("No champion model, predicting using newest model")
         model_info = client.get_latest_versions(MODEL_NAME)[0]
@@ -78,26 +79,26 @@ if __name__ == "__main__":
     store = nml.io.store.FilesystemStore(root_path=str(MODELS_DIR))
     udc = store.load(filename="udc.pkl", as_type=nml.UnivariateDriftCalculator)
     estimator = store.load(filename="estimator.pkl", as_type=nml.CBPE)
-    
+
     params = run_data_dict["params"]
     params["feature_columns"] = [inp["name"] for inp in json.loads(log_model_meta[0]['signature']['inputs'])]
     preds_path = predict(loaded_model, df_test, params, probs=True)
-    
+
     df_preds = pd.read_csv(preds_path)
 
     analysis_df = df_test.copy()
     analysis_df["prediction"] = df_preds[target]
-    analysis_df["predicted_probability"] = df_preds["predicted_probability"]
 
     
     git_hash = get_git_commit_hash()
     mlflow.set_experiment("stroke_predictions")
-    with mlflow.start_run(tags={"git_sha": get_git_commit_hash()}):
+
+    with mlflow.start_run(tags={"git_sha": get_git_commit_hash() or "unknown"}):
         estimated_performance = estimator.estimate(analysis_df)
         fig1 = estimated_performance.plot()
         mlflow.log_figure(fig1, "estimated_performance.png")
-        univariate_drift = udc.calculate(analysis_df.drop(columns=["id", "prediction", "predicted_probability"], axis=1))
-        plot_col_names = analysis_df.drop(columns=["id", "prediction", "predicted_probability"], axis=1).columns
+        univariate_drift = udc.calculate(analysis_df.drop(columns=[ "prediction"], axis=1))
+        plot_col_names = analysis_df.drop(columns=["prediction"], axis=1).columns
         for p in plot_col_names:
             try:
                 fig2 = univariate_drift.filter(column_names=[p]).plot()
