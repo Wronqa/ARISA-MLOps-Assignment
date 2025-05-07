@@ -34,6 +34,7 @@ fsspec==2025.3.2
 gcsfs==2025.3.2
 gitdb==4.0.12
 GitPython==3.1.41
+flake8
 google-api-core==2.24.2
 google-auth==2.40.1
 google-auth-oauthlib==1.2.2
