@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - task-02-mlops
     paths:  # predict when the test set has changed, as well as when the model artifact is updated
       - 'data/raw/test.csv'
       - 'data/processed/test.csv'
