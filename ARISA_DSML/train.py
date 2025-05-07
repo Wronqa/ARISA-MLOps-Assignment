@@ -106,63 +106,55 @@ def train_cv(X_train:pd.DataFrame, y_train:pd.DataFrame, params:dict, eval_metri
 
 def train(
     X_train: pd.DataFrame,
-    y_train: pd.DataFrame, # Lub pd.Series, zależnie od Twoich danych
+    y_train: pd.DataFrame, 
     params: dict | None,
     artifact_name: str = "catboost_model_heart",
     cv_results: pd.DataFrame | None = None,
-) -> tuple[Path, Path]: # Zmieniono typ zwracany na Path dla spójności
+) -> tuple[Path, Path]: 
     """Train model on full dataset, log with MLflow, and save artifacts."""
     if params is None:
         logger.info("Training model without tuned hyperparameters (using CatBoost defaults).")
-        params = {} # CatBoost użyje swoich domyślnych wartości
+        params = {} 
 
     with mlflow.start_run() as run:
         logger.info(f"MLflow Run ID: {run.info.run_id} started.")
 
-        # --- Przygotowanie i logowanie parametrów ---
-        # Parametry do logowania w MLflow mogą być nieco inne niż te dla CatBoost
+       
         mlflow_logged_params = params.copy()
-        if hasattr(X_train, 'columns'): # Upewnij się, że X_train ma kolumny
+        if hasattr(X_train, 'columns'): 
             mlflow_logged_params["feature_columns"] = list(X_train.columns)
-        # Jeśli 'ignored_features' ma być zawsze logowane i/lub używane, można je dodać:
-        # mlflow_logged_params["ignored_features"] = [0] # Przykład
-
-        # Parametry przekazywane bezpośrednio do CatBoost
-        # Usuń klucze, które nie są hiperparametrami CatBoost, jeśli są w `params`
+        
         catboost_training_params = {
             k: v for k, v in params.items()
-            if k not in ["feature_columns"] # Dodaj inne, jeśli są w `params` a nie dla CatBoost
+            if k not in ["feature_columns"] 
         }
-        # Jeśli `ignored_features` jest zawsze stałe i nie w `params`:
-        # catboost_training_params["ignored_features"] = [0] # To jest specyficzne dla CatBoost
+       
 
         mlflow.log_params(mlflow_logged_params)
         logger.info(f"Logged parameters to MLflow: {mlflow_logged_params}")
 
-        # --- Trening modelu ---
+        
         model = CatBoostClassifier(
-            **catboost_training_params, # Przekaż tylko oczekiwane parametry
-            verbose=0, # Mniej gadatliwy output, verbose_eval kontroluje logi treningu
+            **catboost_training_params, 
+            verbose=0, 
         )
         logger.info(f"Starting CatBoost model training with params: {catboost_training_params}")
         model.fit(
             X_train,
             y_train,
-            verbose_eval=50, # Loguj postęp co 50 iteracji
+            verbose_eval=50, 
             early_stopping_rounds=50,
-            # use_best_model=True, # Zazwyczaj chcemy True z early_stopping_rounds
-            plot=False, # Wykresy z fit() lepiej generować osobno i logować przez MLflow
+            plot=False, 
         )
         logger.info("Model training completed.")
 
-        # --- Zapis lokalny i logowanie artefaktu modelu (.cbm) ---
+  
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
         model_file_path = MODELS_DIR / f"{artifact_name}.cbm"
-        model.save_model(str(model_file_path)) # save_model często oczekuje stringa
-        mlflow.log_artifact(str(model_file_path), artifact_path="model_cbm_file") # Opcjonalny podkatalog
+        model.save_model(str(model_file_path)) 
+        mlflow.log_artifact(str(model_file_path), artifact_path="model_cbm_file") 
         logger.info(f"Model saved to {model_file_path} and logged as MLflow artifact.")
 
-        # --- Logowanie wyników CV i wykresów (jeśli są) ---
         if cv_results is not None and not cv_results.empty:
             logger.info("Logging CV results and figures.")
             if "test-F1-mean" in cv_results.columns:
@@ -170,39 +162,38 @@ def train(
                 mlflow.log_metric("f1_cv_mean", cv_f1_mean_metric)
                 logger.info(f"Logged CV F1 mean: {cv_f1_mean_metric:.4f}")
 
-                # fig1 = plot_error_scatter( # Upewnij się, że plot_error_scatter jest zdefiniowane
-                #     df_plot=cv_results,
-                #     name="Mean F1 Score",
-                #     title="Cross-Validation (N=5) Mean F1 score with Error Bands",
-                #     xtitle="Training Steps", ytitle="Performance Score",
-                #     yaxis_range=[0.5, 1.0],
-                # )
-                # if fig1: mlflow.log_figure(fig1, "test-F1-mean_vs_iterations.png")
+                fig1 = plot_error_scatter( 
+                    df_plot=cv_results,
+                    name="Mean F1 Score",
+                    title="Cross-Validation (N=5) Mean F1 score with Error Bands",
+                    xtitle="Training Steps", ytitle="Performance Score",
+                    yaxis_range=[0.5, 1.0],
+                )
+                if fig1: mlflow.log_figure(fig1, "test-F1-mean_vs_iterations.png")
 
             if "test-Logloss-mean" in cv_results.columns and "iterations" in cv_results.columns:
-                # fig2 = plot_error_scatter( # Upewnij się, że plot_error_scatter jest zdefiniowane
-                #     df_plot=cv_results, x="iterations", y="test-Logloss-mean",
-                #     err="test-Logloss-std" if "test-Logloss-std" in cv_results.columns else None,
-                #     name="Mean logloss",
-                #     title="Cross-Validation (N=5) Mean Logloss with Error Bands",
-                #     xtitle="Training Steps", ytitle="Logloss",
-                # )
-                # if fig2: mlflow.log_figure(fig2, "test-logloss-mean_vs_iterations.png")
-                pass # Odkomentuj i dostosuj, jeśli potrzebne
+                fig2 = plot_error_scatter( 
+                    df_plot=cv_results, x="iterations", y="test-Logloss-mean",
+                    err="test-Logloss-std" if "test-Logloss-std" in cv_results.columns else None,
+                    name="Mean logloss",
+                    title="Cross-Validation (N=5) Mean Logloss with Error Bands",
+                    xtitle="Training Steps", ytitle="Logloss",
+                )
+                if fig2: mlflow.log_figure(fig2, "test-logloss-mean_vs_iterations.png")
+                pass 
         else:
             logger.info("No CV results to log.")
 
-        # --- Logowanie modelu w formacie MLflow i rejestracja ---
+       
         logger.info("Logging model in MLflow format.")
         input_example = X_train.head(5) if isinstance(X_train, pd.DataFrame) else None
         
-        # Upewnij się, że MODEL_NAME jest zdefiniowany (np. globalnie lub z configu)
-        # Jeśli nie chcesz rejestrować, ustaw MODEL_NAME na None lub dodaj flagę
+       
         registered_model_name_to_use = MODEL_NAME if 'MODEL_NAME' in globals() else None
 
         mlflow_model_info = mlflow.catboost.log_model(
             cb_model=model,
-            artifact_path="mlflow_catboost_model", # Podkatalog w artefaktach MLflow
+            artifact_path="mlflow_catboost_model", 
             input_example=input_example,
             registered_model_name=registered_model_name_to_use,
         )
@@ -210,42 +201,38 @@ def train(
 
         if registered_model_name_to_use:
             logger.info(f"Attempting to update registry for model: {registered_model_name_to_use}")
-            client = MlflowClient() # Użyje URI z mlflow.get_tracking_uri()
+            client = MlflowClient() 
             latest_versions = client.get_latest_versions(registered_model_name_to_use)
             if latest_versions:
                 model_version_info = latest_versions[0]
                 client.set_registered_model_alias(registered_model_name_to_use, "challenger", model_version_info.version)
                 logger.info(f"Set alias 'challenger' for {registered_model_name_to_use} version {model_version_info.version}.")
 
-                # git_sha_val = get_git_commit_hash() # Upewnij się, że get_git_commit_hash jest zdefiniowane
-                # if git_sha_val:
-                #     client.set_model_version_tag(
-                #         name=model_version_info.name, version=model_version_info.version,
-                #         key="git_sha", value=git_sha_val,
-                #     )
-                #     logger.info(f"Set tag 'git_sha': {git_sha_val} for model version.")
+                git_sha_val = get_git_commit_hash() # Upewnij się, że get_git_commit_hash jest zdefiniowane
+                if git_sha_val:
+                    client.set_model_version_tag(
+                        name=model_version_info.name, version=model_version_info.version,
+                        key="git_sha", value=git_sha_val,
+                    )
+                    logger.info(f"Set tag 'git_sha': {git_sha_val} for model version.")
             else:
                 logger.warning(f"No versions found for model '{registered_model_name_to_use}' in registry.")
         else:
             logger.info("Model not registered as no registered_model_name was provided/defined.")
 
 
-        # --- Zapis lokalny parametrów (używanych do logowania w MLflow) ---
-        # Twój oryginalny kod używał loggable_params (które zawierały 'feature_columns' etc.)
-        # i joblib.dump. Zachowuję to dla spójności z oryginałem.
-        # Rozważ użycie JSON dla lepszej czytelności, jeśli zawartość na to pozwala.
+       
         model_params_file_path = MODELS_DIR / "model_params.pkl"
         joblib.dump(mlflow_logged_params, model_params_file_path)
         logger.info(f"Logged parameters (mlflow_logged_params) saved locally to {model_params_file_path}")
-        # Opcjonalnie zaloguj ten plik .pkl do MLflow
-        # mlflow.log_artifact(str(model_params_file_path), artifact_path="run_configuration")
+        mlflow.log_artifact(str(model_params_file_path), artifact_path="run_configuration")
 
     logger.info(f"MLflow Run ID: {run.info.run_id} completed.")
     return model_file_path, model_params_file_path
 
 
 
-def plot_error_scatter(  # noqa: PLR0913
+def plot_error_scatter(  
         df_plot:pd.DataFrame,
         x:str="iterations",
         y:str="test-F1-mean",
@@ -301,22 +288,45 @@ def plot_error_scatter(  # noqa: PLR0913
     return fig
 
 
-@app.command()
-def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    # -----------------------------------------
-):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Training some model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Modeling training complete.")
-    # -----------------------------------------
+def get_or_create_experiment(experiment_name:str):
+    """Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
+
+    This function checks if an experiment with the given name exists within MLflow.
+    If it does, the function returns its ID. If not, it creates a new experiment
+    with the provided name and returns its ID.
+
+    Parameters
+    ----------
+    - experiment_name (str): Name of the MLflow experiment.
+
+    Returns
+    -------
+    - str: ID of the existing or newly created MLflow experiment.
+
+    """
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+        return experiment.experiment_id
+
+    return mlflow.create_experiment(experiment_name)
+
 
 
 if __name__ == "__main__":
-    app()
+    df_train = pd.read_csv(PROCESSED_DATA_DIR / "train.csv")
+
+    y_train = df_train.pop(target)
+    X_train = df_train
+
+    experiment_id = get_or_create_experiment("stroke_prediction_hyperparam_tuning")
+    mlflow.set_experiment(experiment_id=experiment_id)
+    best_params_path = run_hyperopt(X_train, y_train)
+    params = joblib.load(best_params_path)
+    cv_output_path = train_cv(X_train, y_train, params)
+    cv_results = pd.read_csv(cv_output_path)
+
+    experiment_id = get_or_create_experiment("stroke_prediction_full_training")
+    mlflow.set_experiment(experiment_id=experiment_id)
+    model_path, model_params_path = train(X_train, y_train, params, cv_results=cv_results)
+
+    cv_results = pd.read_csv(cv_output_path)
+
