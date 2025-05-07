@@ -43,7 +43,7 @@ resolve:
 	python -m ARISA_DSML.resolve
 
 .PHONY: predict
-predict: resolve
+predict: 
 	python -m ARISA_DSML.predict
 
 
