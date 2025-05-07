@@ -1,7 +1,3 @@
-from pathlib import Path
-
-from loguru import logger
-from tqdm import tqdm
 import typer
 from pathlib import Path
 
@@ -16,14 +12,12 @@ import plotly.graph_objects as go
 from sklearn.metrics import f1_score, log_loss
 from sklearn.model_selection import train_test_split
 
-from ARISA_DSML.config import MODELS_DIR, PROCESSED_DATA_DIR
-
 from ARISA_DSML.config import (
-FIGURES_DIR,
-MODEL_NAME,
-MODELS_DIR,
-PROCESSED_DATA_DIR,
-target,
+    FIGURES_DIR,
+    MODEL_NAME,
+    MODELS_DIR,
+    PROCESSED_DATA_DIR,
+    target,
 )
 from ARISA_DSML.helpers import get_git_commit_hash
 import nannyml as nml
@@ -31,13 +25,13 @@ import nannyml as nml
 app = typer.Typer()
 
 
-def run_hyperopt(X_train:pd.DataFrame, y_train:pd.DataFrame, test_size:float=0.25, n_trials:int=20, overwrite:bool=False)->str|Path:  # noqa: PLR0913
+def run_hyperopt(X_train: pd.DataFrame, y_train: pd.DataFrame, test_size: float = 0.25, n_trials: int = 20, overwrite: bool = False) -> str | Path:  # noqa: PLR0913
     """Run optuna hyperparameter tuning."""
     best_params_path = MODELS_DIR / "best_params.pkl"
     if not best_params_path.is_file() or overwrite:
         X_train_opt, X_val_opt, y_train_opt, y_val_opt = train_test_split(X_train, y_train, test_size=test_size, random_state=42)
 
-        def objective(trial:optuna.trial.Trial)->float:
+        def objective(trial: optuna.trial.Trial) -> float:
             with mlflow.start_run(nested=True):
                 params = {
                     "depth": trial.suggest_int("depth", 2, 10),
@@ -78,9 +72,7 @@ def run_hyperopt(X_train:pd.DataFrame, y_train:pd.DataFrame, test_size:float=0.2
     return best_params_path
 
 
-
-
-def train_cv(X_train:pd.DataFrame, y_train:pd.DataFrame, params:dict, eval_metric:str="F1", n:int=5)->str|Path:  # noqa: PLR0913
+def train_cv(X_train: pd.DataFrame, y_train: pd.DataFrame, params: dict, eval_metric: str = "F1", n: int = 5) -> str | Path:  # noqa: PLR0913
     """Do cross-validated training."""
     params["eval_metric"] = eval_metric
     params["loss_function"] = "Logloss"
@@ -106,53 +98,49 @@ def train_cv(X_train:pd.DataFrame, y_train:pd.DataFrame, params:dict, eval_metri
 
 def train(
     X_train: pd.DataFrame,
-    y_train: pd.DataFrame, 
+    y_train: pd.DataFrame,
     params: dict | None,
     artifact_name: str = "catboost_model_heart",
     cv_results: pd.DataFrame | None = None,
-) -> tuple[Path, Path]: 
+) -> tuple[Path, Path]:
     """Train model on full dataset, log with MLflow, and save artifacts."""
     if params is None:
         logger.info("Training model without tuned hyperparameters (using CatBoost defaults).")
-        params = {} 
+        params = {}
 
     with mlflow.start_run() as run:
         logger.info(f"MLflow Run ID: {run.info.run_id} started.")
 
-       
         mlflow_logged_params = params.copy()
-        if hasattr(X_train, 'columns'): 
+        if hasattr(X_train, 'columns'):
             mlflow_logged_params["feature_columns"] = list(X_train.columns)
-        
+
         catboost_training_params = {
             k: v for k, v in params.items()
-            if k not in ["feature_columns"] 
+            if k not in ["feature_columns"]
         }
-       
 
         mlflow.log_params(mlflow_logged_params)
         logger.info(f"Logged parameters to MLflow: {mlflow_logged_params}")
 
-        
         model = CatBoostClassifier(
-            **catboost_training_params, 
-            verbose=0, 
+            **catboost_training_params,
+            verbose=0,
         )
         logger.info(f"Starting CatBoost model training with params: {catboost_training_params}")
         model.fit(
             X_train,
             y_train,
-            verbose_eval=50, 
+            verbose_eval=50,
             early_stopping_rounds=50,
-            plot=False, 
+            plot=False,
         )
         logger.info("Model training completed.")
 
-  
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
         model_file_path = MODELS_DIR / f"{artifact_name}.cbm"
-        model.save_model(str(model_file_path)) 
-        mlflow.log_artifact(str(model_file_path), artifact_path="model_cbm_file") 
+        model.save_model(str(model_file_path))
+        mlflow.log_artifact(str(model_file_path), artifact_path="model_cbm_file")
         logger.info(f"Model saved to {model_file_path} and logged as MLflow artifact.")
 
         if cv_results is not None and not cv_results.empty:
@@ -162,38 +150,38 @@ def train(
                 mlflow.log_metric("f1_cv_mean", cv_f1_mean_metric)
                 logger.info(f"Logged CV F1 mean: {cv_f1_mean_metric:.4f}")
 
-                fig1 = plot_error_scatter( 
+                fig1 = plot_error_scatter(
                     df_plot=cv_results,
                     name="Mean F1 Score",
                     title="Cross-Validation (N=5) Mean F1 score with Error Bands",
                     xtitle="Training Steps", ytitle="Performance Score",
                     yaxis_range=[0.5, 1.0],
                 )
-                if fig1: mlflow.log_figure(fig1, "test-F1-mean_vs_iterations.png")
+                if fig1:
+                    mlflow.log_figure(fig1, "test-F1-mean_vs_iterations.png")
 
             if "test-Logloss-mean" in cv_results.columns and "iterations" in cv_results.columns:
-                fig2 = plot_error_scatter( 
+                fig2 = plot_error_scatter(
                     df_plot=cv_results, x="iterations", y="test-Logloss-mean",
                     err="test-Logloss-std" if "test-Logloss-std" in cv_results.columns else None,
                     name="Mean logloss",
                     title="Cross-Validation (N=5) Mean Logloss with Error Bands",
                     xtitle="Training Steps", ytitle="Logloss",
                 )
-                if fig2: mlflow.log_figure(fig2, "test-logloss-mean_vs_iterations.png")
-                pass 
+                if fig2:
+                    mlflow.log_figure(fig2, "test-logloss-mean_vs_iterations.png")
+                pass
         else:
             logger.info("No CV results to log.")
 
-       
         logger.info("Logging model in MLflow format.")
         input_example = X_train.head(5) if isinstance(X_train, pd.DataFrame) else None
-        
-       
+
         registered_model_name_to_use = MODEL_NAME if 'MODEL_NAME' in globals() else None
 
         mlflow_model_info = mlflow.catboost.log_model(
             cb_model=model,
-            artifact_path="mlflow_catboost_model", 
+            artifact_path="mlflow_catboost_model",
             input_example=input_example,
             registered_model_name=registered_model_name_to_use,
         )
@@ -201,14 +189,14 @@ def train(
 
         if registered_model_name_to_use:
             logger.info(f"Attempting to update registry for model: {registered_model_name_to_use}")
-            client = MlflowClient() 
+            client = MlflowClient()
             latest_versions = client.get_latest_versions(registered_model_name_to_use)
             if latest_versions:
                 model_version_info = latest_versions[0]
                 client.set_registered_model_alias(registered_model_name_to_use, "challenger", model_version_info.version)
                 logger.info(f"Set alias 'challenger' for {registered_model_name_to_use} version {model_version_info.version}.")
 
-                git_sha_val = get_git_commit_hash() # Upewnij się, że get_git_commit_hash jest zdefiniowane
+                git_sha_val = get_git_commit_hash()  # Upewnij się, że get_git_commit_hash jest zdefiniowane
                 if git_sha_val:
                     client.set_model_version_tag(
                         name=model_version_info.name, version=model_version_info.version,
@@ -220,12 +208,10 @@ def train(
         else:
             logger.info("Model not registered as no registered_model_name was provided/defined.")
 
-
         model_params_file_path = MODELS_DIR / "model_params.pkl"
         joblib.dump(mlflow_logged_params, model_params_file_path)
         logger.info(f"Logged parameters (mlflow_logged_params) saved locally to {model_params_file_path}")
         mlflow.log_artifact(str(model_params_file_path), artifact_path="run_configuration")
-
 
         """----------NannyML----------"""
         # Model monitoring initialization
@@ -233,7 +219,7 @@ def train(
         reference_df["prediction"] = model.predict(X_train)
         reference_df["predicted_probability"] = [p[1] for p in model.predict_proba(X_train)]
         reference_df[target] = y_train
-        col_names = reference_df.drop(columns=["prediction", target, "predicted_probability"]).columns
+        reference_df.drop(columns=["prediction", target, "predicted_probability"]).columns
         chunk_size = 50
 
         # univariate drift for features
@@ -257,29 +243,25 @@ def train(
         store = nml.io.store.FilesystemStore(root_path=str(MODELS_DIR))
         store.store(udc, filename="udc.pkl")
         store.store(estimator, filename="estimator.pkl")
-        
+
         mlflow.log_artifact(MODELS_DIR / "udc.pkl")
         mlflow.log_artifact(MODELS_DIR / "estimator.pkl")
 
-
-       
-        
     logger.info(f"MLflow Run ID: {run.info.run_id} completed.")
     return model_file_path, model_params_file_path
 
 
-
-def plot_error_scatter(  
-        df_plot:pd.DataFrame,
-        x:str="iterations",
-        y:str="test-F1-mean",
-        err:str="test-F1-std",
-        name:str="",
-        title:str="",
-        xtitle:str="",
-        ytitle:str="",
-        yaxis_range:list[float]|None=None,
-    )->None:
+def plot_error_scatter(
+    df_plot: pd.DataFrame,
+    x: str = "iterations",
+    y: str = "test-F1-mean",
+    err: str = "test-F1-std",
+    name: str = "",
+    title: str = "",
+    xtitle: str = "",
+    ytitle: str = "",
+    yaxis_range: list[float] | None = None,
+) -> None:
     """Plot plotly scatter plots with error areas."""
     # Create figure
     fig = go.Figure()
@@ -298,11 +280,11 @@ def plot_error_scatter(
     fig.add_trace(
         go.Scatter(
             x=pd.concat([df_plot[y], df_plot[x][::-1]]),
-            y=pd.concat([df_plot[y]+df_plot[err],
-                         df_plot[y]-df_plot[err]]),
+            y=pd.concat([df_plot[y] + df_plot[err],
+                         df_plot[y] - df_plot[err]]),
             fill="toself",
             fillcolor="rgba(0, 0, 255, 0.2)",
-            line={"color":"rgba(255, 255, 255, 0)"},
+            line={"color": "rgba(255, 255, 255, 0)"},
             showlegend=False,
         ),
     )
@@ -325,7 +307,7 @@ def plot_error_scatter(
     return fig
 
 
-def get_or_create_experiment(experiment_name:str):
+def get_or_create_experiment(experiment_name: str):
     """Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
 
     This function checks if an experiment with the given name exists within MLflow.
@@ -347,7 +329,6 @@ def get_or_create_experiment(experiment_name:str):
     return mlflow.create_experiment(experiment_name)
 
 
-
 if __name__ == "__main__":
     df_train = pd.read_csv(PROCESSED_DATA_DIR / "train.csv")
 
@@ -366,4 +347,3 @@ if __name__ == "__main__":
     model_path, model_params_path = train(X_train, y_train, params, cv_results=cv_results)
 
     cv_results = pd.read_csv(cv_output_path)
-
