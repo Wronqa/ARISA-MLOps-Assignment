@@ -29,7 +29,15 @@ def get_raw_data(dataset_name:str=DATASET)->None:
 
     api.dataset_download_files(dataset_name, path=str(download_folder), unzip=True)
 
+    downloaded_files = list(download_folder.glob("*"))
+    if not downloaded_files:
+        logger.warning("No files found after download.")
+        return None
 
+    latest_file = max(downloaded_files, key=lambda f: f.stat().st_mtime)
+    logger.info(f"Latest downloaded file: {latest_file.name}")
+    
+    return latest_file.name
 
 
 def preprocess_df(file:str|Path)->str|Path:
@@ -77,20 +85,16 @@ def preprocess_df(file:str|Path)->str|Path:
 
 
 
-
-
 def create_ordinal_encoder(categories_order):
     return OrdinalEncoder(categories=categories_order)
 
 
 
 if __name__=="__main__":
-    # get the train and test sets from default location
-    logger.info("getting datasets")
-    get_raw_data()
+    logger.info("Fetching raw dataset")
+    dataset_file_name = get_raw_data()
 
-    # preprocess both sets
-    #logger.info("preprocessing train.csv")
-    #preprocess_df(RAW_DATA_DIR / "train.csv")
-    #logger.info("preprocessing test.csv")
-    #preprocess_df(RAW_DATA_DIR / "test.csv")
+     # preprocess both sets
+    logger.info("preprocessing data")
+    preprocess_df(RAW_DATA_DIR / dataset_file_name)
+   

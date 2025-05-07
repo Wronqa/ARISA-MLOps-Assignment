@@ -1,31 +1,24 @@
+import os
+import json
 from pathlib import Path
 
-from loguru import logger
-from tqdm import tqdm
-import typer
-
-from ARISA_DSML.config import MODELS_DIR, PROCESSED_DATA_DIR
-
-"""Run prediction on test data."""
-from pathlib import Path
-from catboost import CatBoostClassifier
 import matplotlib.pyplot as plt
 import pandas as pd
-from loguru import logger
 import shap
-import joblib
-import os
-from ARISA_DSML.config import FIGURES_DIR, MODELS_DIR, target, PROCESSED_DATA_DIR, MODEL_NAME
-from ARISA_DSML.resolve import get_model_by_alias
-import mlflow
+import typer
+from catboost import CatBoostClassifier
+from loguru import logger
 from mlflow.client import MlflowClient
-import json
+from tqdm import tqdm
 import nannyml as nml
+import mlflow
+
+from ARISA_DSML.config import FIGURES_DIR, MODELS_DIR,PROCESSED_DATA_DIR,MODEL_NAME,target
+from ARISA_DSML.helpers import get_git_commit_hash
+from ARISA_DSML.resolve import get_model_by_alias
 
 
 app = typer.Typer()
-
-
 
 
 def plot_shap(model:CatBoostClassifier, df_plot:pd.DataFrame)->None:
@@ -54,22 +47,64 @@ def predict(model:CatBoostClassifier, df_pred:pd.DataFrame, params:dict, probs=F
     
     return preds_path
 
-@app.command()
-def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "test_features.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    predictions_path: Path = PROCESSED_DATA_DIR / "test_predictions.csv",
-    # -----------------------------------------
-):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Performing inference for model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Inference complete.")
-    # -----------------------------------------
-
 
 if __name__ == "__main__":
-    app()
+    df_test = pd.read_csv(PROCESSED_DATA_DIR / "test.csv")
+
+    client = MlflowClient(mlflow.get_tracking_uri())
+    model_info = get_model_by_alias(client, alias="champion")
+    if model_info is None:
+        logger.info("No champion model, predicting using newest model")
+        model_info = client.get_latest_versions(MODEL_NAME)[0]
+
+    # extract params/metrics data for run `test_run_id` in a single dict
+    run_data_dict = client.get_run(model_info.run_id).data.to_dictionary()
+    run = client.get_run(model_info.run_id)
+    log_model_meta = json.loads(run.data.tags['mlflow.log-model.history'])
+    log_model_meta[0]['signature']
+
+
+    _, artifact_folder = os.path.split(model_info.source)
+    logger.info(artifact_folder)
+    model_uri = "runs:/{}/{}".format(model_info.run_id, artifact_folder)
+    logger.info(model_uri)
+    loaded_model = mlflow.catboost.load_model(model_uri)
+
+
+    ###
+    local_path = client.download_artifacts(model_info.run_id, "udc.pkl", "models")
+    local_path = client.download_artifacts(model_info.run_id, "estimator.pkl", "models")
+
+    store = nml.io.store.FilesystemStore(root_path=str(MODELS_DIR))
+    udc = store.load(filename="udc.pkl", as_type=nml.UnivariateDriftCalculator)
+    estimator = store.load(filename="estimator.pkl", as_type=nml.CBPE)
+    
+    params = run_data_dict["params"]
+    params["feature_columns"] = [inp["name"] for inp in json.loads(log_model_meta[0]['signature']['inputs'])]
+    preds_path = predict(loaded_model, df_test, params, probs=True)
+    
+    df_preds = pd.read_csv(preds_path)
+
+    analysis_df = df_test.copy()
+    analysis_df["prediction"] = df_preds[target]
+    analysis_df["predicted_probability"] = df_preds["predicted_probability"]
+
+    
+    git_hash = get_git_commit_hash()
+    mlflow.set_experiment("stroke_predictions")
+    with mlflow.start_run(tags={"git_sha": get_git_commit_hash()}):
+        estimated_performance = estimator.estimate(analysis_df)
+        fig1 = estimated_performance.plot()
+        mlflow.log_figure(fig1, "estimated_performance.png")
+        univariate_drift = udc.calculate(analysis_df.drop(columns=["id", "prediction", "predicted_probability"], axis=1))
+        plot_col_names = analysis_df.drop(columns=["id", "prediction", "predicted_probability"], axis=1).columns
+        for p in plot_col_names:
+            try:
+                fig2 = univariate_drift.filter(column_names=[p]).plot()
+                mlflow.log_figure(fig2, f"univariate_drift_{p}.png")
+                fig3 = univariate_drift.filter(period="analysis", column_names=[p]).plot(kind='distribution')
+                mlflow.log_figure(fig3, f"univariate_drift_dist_{p}.png")
+            except:
+                logger.info("failed to plot some univariate drift analyses!")
+        mlflow.log_params({"git_hash": git_hash})
+
