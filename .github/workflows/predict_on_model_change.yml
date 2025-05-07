@@ -9,7 +9,7 @@ on:
       - 'data/raw/test.csv'
       - 'data/processed/test.csv'
       - 'ARISA_DSML/predict.py'
-      - 'models/catboost_model_titanic.cbm'
+      - 'models/catboost_model_stroke.cbm'
   workflow_dispatch:  # Allows manual triggering from the train workflow
 jobs:
   preprocess:
