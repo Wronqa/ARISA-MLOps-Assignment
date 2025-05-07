@@ -29,12 +29,11 @@
 		"AWS_ACCESS_KEY_ID": "${localEnv:AWS_ACCESS_KEY_ID}",
 		"AWS_SECRET_ACCESS_KEY_ID": "${localEnv:AWS_SECRET_ACCESS_KEY_ID}",
 		"ARTIFACT_BUCKET": "${localEnv:ARTIFACT_BUCKET}",
-		"MLFLOW_TRACKING_URI": "${localEnv:MLFLOW_TRACKING_URI}"
 	},
 	
 	"containerEnv": {
 		"iscontainer": "y",
-        "MLFLOW_TRACKING_URI": "${localEnv:MLFLOW_TRACKING_URI}"
+        "MLFLOW_TRACKING_URI": "http://localhost:5000"
 	},
 	
 	"portsAttributes": {
@@ -47,9 +46,6 @@
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 	"secrets": {
-		"MLFLOW_TRACKING_URI":{
-			"description": "URI for the Mlflow backend db connection."
-		},
 		"MLFLOWDBUSERNAME": {
 			"description": "Username for authenticating the Mlflow backend db connection."
 		},
