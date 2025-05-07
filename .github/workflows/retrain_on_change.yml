@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - task-02-mlops
     paths:  # (re)train when train data changes or when the preproc or train code changes
       - 'data/raw/train.csv'
       - 'data/processed/train.csv'
