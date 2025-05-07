@@ -221,12 +221,49 @@ def train(
             logger.info("Model not registered as no registered_model_name was provided/defined.")
 
 
-       
         model_params_file_path = MODELS_DIR / "model_params.pkl"
         joblib.dump(mlflow_logged_params, model_params_file_path)
         logger.info(f"Logged parameters (mlflow_logged_params) saved locally to {model_params_file_path}")
         mlflow.log_artifact(str(model_params_file_path), artifact_path="run_configuration")
 
+
+        """----------NannyML----------"""
+        # Model monitoring initialization
+        reference_df = X_train.copy()
+        reference_df["prediction"] = model.predict(X_train)
+        reference_df["predicted_probability"] = [p[1] for p in model.predict_proba(X_train)]
+        reference_df[target] = y_train
+        col_names = reference_df.drop(columns=["prediction", target, "predicted_probability"]).columns
+        chunk_size = 50
+
+        # univariate drift for features
+        udc = nml.UnivariateDriftCalculator(
+            column_names=X_train.columns,
+            chunk_size=chunk_size,
+        )
+        udc.fit(reference_df.drop(columns=["prediction", target, "predicted_probability"]))
+
+        # Confidence-based Performance Estimation for target
+        estimator = nml.CBPE(
+            problem_type="classification_binary",
+            y_pred_proba="predicted_probability",
+            y_pred="prediction",
+            y_true=target,
+            metrics=["roc_auc"],
+            chunk_size=chunk_size,
+        )
+        estimator = estimator.fit(reference_df)
+
+        store = nml.io.store.FilesystemStore(root_path=str(MODELS_DIR))
+        store.store(udc, filename="udc.pkl")
+        store.store(estimator, filename="estimator.pkl")
+        
+        mlflow.log_artifact(MODELS_DIR / "udc.pkl")
+        mlflow.log_artifact(MODELS_DIR / "estimator.pkl")
+
+
+       
+        
     logger.info(f"MLflow Run ID: {run.info.run_id} completed.")
     return model_file_path, model_params_file_path
 
