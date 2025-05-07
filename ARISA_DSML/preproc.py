@@ -1,14 +1,9 @@
 """Functions for preprocessing the data."""
-
-import os
 from pathlib import Path
-import re
-import zipfile
 
 from kaggle.api.kaggle_api_extended import KaggleApi
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 
@@ -19,7 +14,7 @@ import pandas as pd
 from ARISA_DSML.config import DATASET, PROCESSED_DATA_DIR, RAW_DATA_DIR
 
 
-def get_raw_data(dataset_name:str=DATASET)->None:
+def get_raw_data(dataset_name: str = DATASET) -> None:
     api = KaggleApi()
     api.authenticate()
 
@@ -36,13 +31,13 @@ def get_raw_data(dataset_name:str=DATASET)->None:
 
     latest_file = max(downloaded_files, key=lambda f: f.stat().st_mtime)
     logger.info(f"Latest downloaded file: {latest_file.name}")
-    
+
     return latest_file.name
 
 
 def preprocess_df(file: str | Path) -> tuple[Path, Path]:
     df = pd.read_csv(file)
-    df_ids = df.pop("id")
+    df.pop("id")
 
     preprocessor = build_preprocessor()
     transformed_df = preprocess_data(df, preprocessor)
@@ -91,17 +86,14 @@ def save_processed_data(df_train: pd.DataFrame, df_test: pd.DataFrame) -> tuple[
     return train_path, test_path
 
 
-
 def create_ordinal_encoder(categories_order):
     return OrdinalEncoder(categories=categories_order)
 
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     logger.info("Fetching raw dataset")
     dataset_file_name = get_raw_data()
 
-     # preprocess both sets
+    # preprocess both sets
     logger.info("preprocessing data")
     preprocess_df(RAW_DATA_DIR / dataset_file_name)
-   
